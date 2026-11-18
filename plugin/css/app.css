@@ -135,18 +135,20 @@ button, input, select { font: inherit; color: inherit; }
 .topbar .topbar-btn:hover { color: var(--color-on-surface); background: color-mix(in srgb, var(--color-primary) 8%, transparent); }
 
 /* Bar-Ilan frame: mode rail (right) | form | action column (left) */
+/* Like the Bar-Ilan dialog: a compact block at the start edge; it does not grow with the window. */
 .frame {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 6.75rem minmax(0, 1fr) 12.5rem;
+  grid-template-columns: 6.75rem minmax(0, 52rem) 12.5rem;
+  justify-content: start;
 }
 .frame.no-actions { grid-template-columns: 6.75rem minmax(0, 1fr); }
 .frame.no-actions .actions { display: none; }
 
 .center { min-width: 0; overflow-y: auto; padding: var(--space-md); }
-.form-host { max-width: 68rem; margin-inline: auto; }
-.frame.results-mode .form-host { max-width: none; }
+.form-host { max-width: none; }
+.frame.results-mode .form-host { max-width: 74rem; }
 
 /* ── mode rail ─────────────────────────────────────────── */
 .rail {
@@ -302,19 +304,19 @@ button, input, select { font: inherit; color: inherit; }
   font-size: 0.9em;
   color: var(--color-on-surface-variant);
 }
-.comp-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
+.comp-col { flex: none; display: flex; flex-direction: column; }
 .comp-col.focused .comp-head { color: var(--color-primary); }
 .comp-col.negated .comp-head { color: var(--color-error); }
 .comp-field { display: flex; align-items: center; gap: 0.25em; margin-bottom: 0.3em; }
-.comp-input { flex: 1; width: 100%; }
+.comp-input { flex: none; width: 7em; }
 .comp-input.main { font-weight: 600; }
 .comp-col.negated .comp-input.main { border-color: var(--color-error); }
 .comp-foot { font-size: 0.75em; text-align: center; color: var(--color-on-surface-variant); opacity: 0.8; }
-.comp-and { flex: none; width: 2.2em; display: flex; flex-direction: column; align-items: center; }
+.comp-and { flex: none; width: 1.8em; display: flex; flex-direction: column; align-items: center; }
 .comp-and-rule { flex: 1; width: 1px; margin-block: 0.2em 1.6em; background: var(--color-outline-variant); }
 .comp-toolbar { display: flex; flex-wrap: wrap; gap: var(--space-sm); margin-top: var(--space-sm); }
 
-.markers { display: inline-flex; gap: 2px; min-width: 1.35em; flex-wrap: wrap; max-width: 4.2em; }
+.markers { display: inline-flex; gap: 2px; width: 2.6em; flex: none; flex-wrap: nowrap; overflow: hidden; }
 .marker {
   display: inline-grid;
   place-items: center;
@@ -327,6 +329,7 @@ button, input, select { font: inherit; color: inherit; }
   color: var(--color-primary);
   font-size: 0.78em;
   font-weight: 700;
+  white-space: nowrap;
   cursor: pointer;
 }
 .marker.approx { background: color-mix(in srgb, var(--color-tertiary) 16%, transparent); color: var(--color-tertiary); }
@@ -404,7 +407,7 @@ button, input, select { font: inherit; color: inherit; }
 /* ── single-line forms ─────────────────────────────────── */
 .line-label { display: block; margin-bottom: var(--space-sm); font-weight: 600; }
 .line-row { display: flex; align-items: center; gap: var(--space-xs); }
-.line-input { flex: 1; height: 2.4em; font-size: 1.05em; }
+.line-input { flex: 1; height: 2.4em; font-size: 1.05em; max-width: 36em; }
 .hint { margin: var(--space-sm) 0 0; font-size: 0.82em; color: var(--color-on-surface-variant); }
 .hint code, .syntax { font-family: var(--font-ui); }
 .hint code {
@@ -513,6 +516,7 @@ button, input, select { font: inherit; color: inherit; }
   font-family: var(--font-main);
   font-size: 1.12em;
   line-height: var(--line-height-reading);
+  max-width: 46em;
 }
 .hit-text mark {
   background: color-mix(in srgb, var(--color-primary) 20%, transparent);
@@ -706,6 +710,8 @@ button, input, select { font: inherit; color: inherit; }
   .comp-grid { flex-wrap: wrap; }
   .comp-or, .comp-and { display: none; }
   .comp-col { flex: 1 1 40%; min-width: 9rem; }
+  .comp-input { flex: 1; width: 100%; min-width: 0; }
+  .markers { width: auto; min-width: 1.35em; }
   .flag-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .flag-empty { display: none; }
   .op-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -720,3 +726,5 @@ button, input, select { font: inherit; color: inherit; }
   .topbar { height: 44px; padding: 0 10px; }
   .topbar .topbar-subtitle { display: none; }
 }
+
+.credits { color: var(--color-on-surface-variant); font-size: 0.88em; }
