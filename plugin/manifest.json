@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "community.bar-ilan-style.tabular-search",
+  "name": "חיפוש בר-אילן",
+  "version": "1.0.0",
+  "description": "חיפוש טבלאי בסגנון בר-אילן: מרכיבים וחלופות, מרחקים וכיוון, מאפייני מרכיב, שלילה, מאגרים, חיפוש קל ומתקדם, שאילתות קודמות ומשפחות.",
+  "author": "Tabular Search Plugin contributors",
+  "entrypoint": "index.html",
+  "minAppVersion": "0.9.98.1",
+  "sdkVersion": "1.x",
+  "permissions": [
+    "search.fulltext.read",
+    "reader.open",
+    "library.books.read"
+  ],
+  "network": {
+    "enabled": false,
+    "allowlist": []
+  },
+  "contributes": {
+    "toolTab": {
+      "title": "חיפוש בר-אילן",
+      "order": 210,
+      "defaultPinned": true,
+      "iconName": "document_table_search_24_regular"
+    }
+  },
+  "stability": "beta"
+}

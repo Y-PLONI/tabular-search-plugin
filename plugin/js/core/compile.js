@@ -162,8 +162,8 @@
   function applyScope(target, ctx, query) {
     const scope = ctx && ctx.scope;
     if (query.searchAll || !scope) return;
-    if (scope.categories && scope.categories.length) target.categories = scope.categories.slice();
-    if (scope.books && scope.books.length) {
+    if (!scope.all && scope.categories && scope.categories.length) target.categories = scope.categories.slice();
+    if (!scope.all && scope.books && scope.books.length) {
       target.books = scope.books.map(function (b) {
         const book = {};
         if (b.id != null) book.id = b.id;

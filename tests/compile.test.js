@@ -207,6 +207,11 @@ test('scope is sent only when "search all" is off; tab settings drop paging keys
     query: 'שבת',
     settings: { mode: 'advanced', categories: ['/הלכה'], books: [{ id: 7, bookId: 'x', type: 'text' }], eras: ['ראשונים'] },
   });
+  // "בחר הכל" in the corpus dialog: only the era filter remains.
+  const everything = compile(table([[['שבת']]], { searchAll: false }), { scope: { ...scope, all: true } });
+  assert.equal(everything.params.categories, undefined);
+  assert.equal(everything.params.books, undefined);
+  assert.deepEqual(everything.params.eras, ['ראשונים']);
 });
 
 test('regex route: letter alternatives, ↔ for two columns, ignored flags', () => {
