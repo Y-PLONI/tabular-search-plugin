@@ -165,3 +165,12 @@ otzaria pack-plugin plugin -o dist/bar-ilan-table-search-2.0.1.otzplugin --force
   in Otzaria's Fluent resolver map (`lib/plugins/utils/fluent_icon_resolver.dart`).
 * Nicht geprüft: echter Lauf in Otzaria (nur Mock-Host im Browser), die Regex-Durchreichung von search.fullText zur Laufzeit, Verhalten der Engine bei
   `negativeCustomSpacing`/`negativeDistance` zusammen mit `anyOrder`, Regex-Ausführung im nativen Tab.
+
+**CI / Release** (`.github/workflows/release.yml`)
+
+* Push to `master` and pull requests: `node --test tests/` plus the official `Otzaria/otzaria-plugin-validator@v1` on
+  `plugin/` (validate and build only, `publish: 'false'`). The `.otzplugin` is uploaded as a workflow artifact.
+* Publishing happens only on a tag `vX.Y.Z`, which must equal `plugin/manifest.json` → `version`, or on a manual run
+  (*Run workflow* with `publish = true`). Then the action publishes to otzaria.org with the secrets `OTZARIA_USER` and
+  `OTZARIA_PASSWORD`, and creates the GitHub release `vX.Y.Z` with the `.otzplugin` attached.
+* Local check without Otzaria: `npx --yes github:Otzaria/otzaria-plugin-validator#v1 plugin --publish false`.
