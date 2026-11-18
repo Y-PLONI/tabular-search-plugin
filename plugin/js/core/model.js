@@ -276,6 +276,38 @@
     });
   }
 
+  /**
+   * Bar-Ilan cell order is row by row (1→2→3→4, then the next row).
+   * Returns the cell `delta` steps away, or null past either end.
+   */
+  function nextCell(col, row, delta) {
+    const flat = row * TABLE_COLUMNS + col + delta;
+    if (flat < 0 || flat >= TABLE_COLUMNS * TABLE_ROWS) return null;
+    return { col: flat % TABLE_COLUMNS, row: Math.floor(flat / TABLE_COLUMNS) };
+  }
+
+  /** Pasted or typed text -> one word per cell (spaces separate, hyphens stay). */
+  function splitWords(text) {
+    return String(text == null ? '' : text).split(/\s+/).filter(Boolean);
+  }
+
+  /**
+   * Writes `words` into the table starting at (col, row), one per cell in
+   * Bar-Ilan order, replacing what was there. Returns the last cell written
+   * and how many words did not fit.
+   */
+  function distributeWords(query, col, row, words) {
+    let cell = { col, row };
+    let last = null;
+    let i = 0;
+    for (; i < words.length && cell; i++) {
+      query.columns[cell.col].fields[cell.row].text = words[i];
+      last = cell;
+      cell = nextCell(cell.col, cell.row, 1);
+    }
+    return { last, dropped: words.length - i };
+  }
+
   return {
     SCHEMA_VERSION,
     TABLE_COLUMNS,
@@ -304,5 +336,8 @@
     fitToTable,
     fitsTable,
     isKnownFlag,
+    nextCell,
+    splitWords,
+    distributeWords,
   };
 });

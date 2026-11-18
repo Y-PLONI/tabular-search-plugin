@@ -66,9 +66,22 @@
         placeholder: r === 0 ? '' : 'או…',
       });
       input.addEventListener('input', function () {
+        // One word per cell, as in Bar-Ilan: whitespace from IME/autocorrect moves on.
+        if (/\s/.test(input.value)) {
+          spreadFrom(c, r, input.value, true);
+          return;
+        }
         app.state.table.columns[c].fields[r].text = input.value;
         app.changed('table');
         refreshField(c, r);
+      });
+      input.addEventListener('paste', function (event) {
+        const text = event.clipboardData && event.clipboardData.getData('text');
+        if (!text || !/\s/.test(text.trim())) return;
+        event.preventDefault();
+        const start = input.selectionStart == null ? input.value.length : input.selectionStart;
+        const end = input.selectionEnd == null ? start : input.selectionEnd;
+        spreadFrom(c, r, input.value.slice(0, start) + text + input.value.slice(end), false);
       });
       input.addEventListener('focus', function () {
         app.setFocus(c, r, input);
@@ -80,7 +93,56 @@
       return h('div', { class: 'comp-field' }, input, markers);
     }
 
+    /** Puts the words of `text` into this cell and the following ones (Bar-Ilan order). */
+    function spreadFrom(c, r, text, typed) {
+      const words = M.splitWords(text);
+      const table = app.state.table;
+      if (!words.length) {
+        table.columns[c].fields[r].text = '';
+      }
+      const result = M.distributeWords(table, c, r, words);
+      app.changed('table');
+      refresh();
+      if (result.dropped) {
+        root.BIHost.notify(result.dropped + ' מילים לא נכנסו לטבלה (16 שדות לכל היותר).');
+      }
+      let target = result.last || { col: c, row: r };
+      // A typed space at the end moves to the next, empty cell.
+      if (typed && /\s$/.test(text)) target = M.nextCell(target.col, target.row, 1) || target;
+      const input = inputs[target.col][target.row];
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+    }
+
+    /** Space: never a space in the cell; move on, splitting the word at the caret if the next cell is empty. */
+    function onSpace(event, c, r) {
+      event.preventDefault();
+      const next = M.nextCell(c, r, 1);
+      if (!next) return;
+      const input = inputs[c][r];
+      const caret = input.selectionStart;
+      const field = app.state.table.columns[c].fields[r];
+      const nextField = app.state.table.columns[next.col].fields[next.row];
+      const nextInput = inputs[next.col][next.row];
+      if (caret > 0 && caret < input.value.length && input.selectionEnd === caret && !nextField.text) {
+        nextField.text = input.value.slice(caret);
+        field.text = input.value.slice(0, caret);
+        app.changed('table');
+        refreshField(c, r);
+        refreshField(next.col, next.row);
+        nextInput.focus();
+        nextInput.setSelectionRange(0, 0);
+        return;
+      }
+      nextInput.focus();
+      nextInput.select();
+    }
+
     function onKey(event, c, r) {
+      if (event.key === ' ' && !event.ctrlKey && !event.altKey && !event.metaKey) {
+        onSpace(event, c, r);
+        return;
+      }
       if (event.key === 'Enter') {
         event.preventDefault();
         app.runSearch();
@@ -95,11 +157,8 @@
       if (event.key === 'ArrowDown' && r < M.TABLE_ROWS - 1) target = [c, r + 1];
       else if (event.key === 'ArrowUp' && r > 0) target = [c, r - 1];
       else if (event.key === 'Tab') {
-        // Bar-Ilan moves row by row: 1→2→3→4 on the same row, then the next row.
-        const flat = r * M.TABLE_COLUMNS + c + (event.shiftKey ? -1 : 1);
-        if (flat >= 0 && flat < M.TABLE_ROWS * M.TABLE_COLUMNS) {
-          target = [flat % M.TABLE_COLUMNS, Math.floor(flat / M.TABLE_COLUMNS)];
-        }
+        const cell = M.nextCell(c, r, event.shiftKey ? -1 : 1);
+        if (cell) target = [cell.col, cell.row];
       }
       if (target) {
         event.preventDefault();
@@ -119,6 +178,19 @@
         ? 'כל שדה מכיל מילה אחת בלבד (בלי רווח או מקף)'
         : kind === 'pattern' ? 'תווים כלליים – החיפוש ייפתח בחיפוש של אוצריא' : '';
       const box = D.clear(markerBoxes[c][r]);
+      if (field.flags.length > 2) {
+        // Many properties: one compact badge, like Bar-Ilan's letter string next to the field.
+        const names = field.flags.map(M.flagLabel).join(', ');
+        box.appendChild(h('button', {
+          type: 'button',
+          class: 'marker' + (field.flags.indexOf('ל') !== -1 ? ' negative' : ''),
+          title: names + ' – לחיצה בוחרת את השדה',
+          'aria-label': 'מאפיינים: ' + names,
+          tabindex: '-1',
+          onclick: function () { inputs[c][r].focus(); },
+        }, field.flags.map(badgeText).join('')));
+        return;
+      }
       field.flags.forEach(function (flag) {
         const def = M.FLAGS[flag];
         const name = def ? def.name : flag;
