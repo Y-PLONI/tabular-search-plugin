@@ -166,8 +166,9 @@
       } else {
         line.appendChild(D.syntaxNode(built.syntax || '—'));
         if (res.ok) {
-          line.appendChild(h('span', { class: 'route-chip' + (res.route === 'regex' ? ' external' : '') },
-            res.route === 'regex' ? 'ייפתח בחיפוש של אוצריא' : 'תוצאות כאן'));
+          const external = searchTarget(res) === 'tab';
+          line.appendChild(h('span', { class: 'route-chip' + (external ? ' external' : '') },
+            external ? 'ייפתח בחיפוש של אוצריא' : 'תוצאות כאן'));
         }
         res.errors.forEach(function (e) { notes.appendChild(h('li', { class: 'error-text' }, e)); });
         if (!res.errors.length) res.warnings.forEach(function (w) { notes.appendChild(h('li', { class: 'warn-text' }, w.text)); });
@@ -367,6 +368,15 @@
 
   // ── search ─────────────────────────────────────────────────────────────────
 
+  /**
+   * The only place that decides search.query ('plugin') vs reader.openSearchTab
+   * ('tab'). search.query sanitises `* ? ( ) |`, so wildcard regexes go to the tab;
+   * compile() already prepares `params` for both routes.
+   */
+  function searchTarget(result) {
+    return result.route === 'regex' ? 'tab' : 'plugin';
+  }
+
   function historyEntry(built) {
     const entry = { view: built.view, syntax: built.syntax, text: built.view === 'table' ? '' : built.text };
     if (built.view === 'table') entry.query = M.cloneQuery(app.state.table);
@@ -396,7 +406,7 @@
       return;
     }
     Store.addHistory(historyEntry(built));
-    if (built.result.route === 'regex') {
+    if (searchTarget(built.result) === 'tab') {
       openTab(built.result.tab, true).then(function () {
         Host.notify('השאילתה עם התווים הכלליים נפתחה בחיפוש של אוצריא.');
       });

@@ -1,7 +1,8 @@
 /*
  * TableQuery -> Otzaria request.
  *   route 'plugin': `params` for search.query (results inside the plugin)
- *   route 'regex' : only `tab` for reader.openSearchTab (wildcards)
+ *   route 'regex' : wildcards as `/…/`; today only reader.openSearchTab runs
+ *                   them (see searchTarget in app.js), `params` is prepared anyway
  * Every result also carries `tab`, so any query can be reopened in Otzaria's
  * own search tab, and `warnings` describing each approximation.
  *
@@ -175,6 +176,16 @@
     if (scope.eras && scope.eras.length) target.eras = scope.eras.slice();
   }
 
+  function pagingOf(ctx) {
+    const paging = {
+      order: (ctx && ctx.order) || 'catalogue',
+      limit: (ctx && ctx.limit) || DEFAULT_PAGE_SIZE,
+      offset: (ctx && ctx.offset) || 0,
+    };
+    if (ctx && ctx.includeBookCounts) paging.includeBookCounts = true;
+    return paging;
+  }
+
   function compilePlugin(query, ctx, all, errors, warnings) {
     const positive = all.filter(function (c) { return !c.negated; });
     const negated = all.filter(function (c) { return c.negated; });
@@ -246,10 +257,7 @@
     }
 
     applyScope(params, ctx, query);
-    params.order = (ctx && ctx.order) || 'catalogue';
-    params.limit = (ctx && ctx.limit) || DEFAULT_PAGE_SIZE;
-    params.offset = (ctx && ctx.offset) || 0;
-    if (ctx && ctx.includeBookCounts) params.includeBookCounts = true;
+    Object.assign(params, pagingOf(ctx));
 
     const settings = {};
     Object.keys(params).forEach(function (key) {
@@ -287,7 +295,9 @@
     built.warnings.forEach(function (w) { warn(warnings, w.code, w.text); });
     const settings = {};
     applyScope(settings, ctx, query);
-    return { params: null, tab: { query: built.regex, settings } };
+    // Prepared for a host that accepts `/…/` in search.query; app.js decides the route.
+    const params = Object.assign({ query: built.regex }, settings, pagingOf(ctx));
+    return { params, tab: { query: built.regex, settings } };
   }
 
   /**

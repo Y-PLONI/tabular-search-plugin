@@ -68,8 +68,9 @@ test('Reference example #5: wildcard routes to the native tab as a regex with th
   const r = compile(q, { scope: { categories: ['/תנך'] } });
   assert.equal(r.ok, true, r.errors.join());
   assert.equal(r.route, 'regex');
-  assert.equal(r.params, null);
   assert.deepEqual(r.tab, { query: '/מ[א-ת]ה רבנו/', settings: { categories: ['/תנך'] } });
+  // Prepared in case the host ever runs regexes through search.query.
+  assert.deepEqual(r.params, { query: '/מ[א-ת]ה רבנו/', categories: ['/תנך'], ...PAGE });
 });
 
 test('empty fields are adjacent and need no spacing', () => {
