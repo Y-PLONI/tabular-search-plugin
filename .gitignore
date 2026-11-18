@@ -1,0 +1,22 @@
+# Bar-Ilan screenshots copied by the user (Windows "צילום מסך ..." names)
+צילום מסך*.png
+צילום*.png
+/*.png
+/*.jpg
+screenshots/
+
+# Local research material (Bar-Ilan screenshots, extracted Bar-Ilan help text,
+# the original third-party plugin). Never commit or ship it.
+research/
+
+# Build output
+*.otzplugin
+dist/
+node_modules/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
