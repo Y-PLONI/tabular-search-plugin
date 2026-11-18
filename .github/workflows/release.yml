@@ -1,26 +1,22 @@
 name: Release
 
-# Publishing to the Otzaria store happens ONLY on a version tag (vX.Y.Z) or a
-# manual run. Pushes and pull requests only test, validate and build.
+# Every push to master tests, validates, publishes to the Otzaria store and
+# creates the GitHub release v<manifest version>. The store rejects a version
+# it already has, and an existing release is not recreated, so a push without
+# a version bump publishes nothing new. Pull requests only test and build.
 on:
   push:
     branches: [master]
-    tags: ['v*']
   pull_request:
   workflow_dispatch:
-    inputs:
-      publish:
-        description: 'Publish to the Otzaria store and create the GitHub release'
-        type: boolean
-        default: false
 
 permissions:
   contents: read
 
 jobs:
   validate:
-    name: Test & validate
-    if: (github.event_name == 'push' && github.ref_type == 'branch') || github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && !inputs.publish)
+    name: Test & validate (pull request)
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -32,10 +28,9 @@ jobs:
           node-version: '22'
 
       - name: Unit tests (model, syntax, compiler)
-        run: node --test tests/
+        run: node --test tests/*.test.js
 
-      # Same checks as the store; builds the .otzplugin but never publishes.
-      - name: Validate & build plugin
+      - name: Validate & build plugin (no publishing)
         id: otzaria
         uses: Otzaria/otzaria-plugin-validator@v1
         with:
@@ -52,7 +47,7 @@ jobs:
 
   release:
     name: Validate, publish & release
-    if: (github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref_name, 'v')) || (github.event_name == 'workflow_dispatch' && inputs.publish)
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -66,36 +61,30 @@ jobs:
           node-version: '22'
 
       - name: Unit tests (model, syntax, compiler)
-        run: node --test tests/
+        run: node --test tests/*.test.js
+
+      # Official Otzaria action: validates, packages .otzplugin, and publishes
+      # to the store. Plugin is identified by manifest.id; version must increase.
+      # build: 'true' keeps the .otzplugin for the release even when nothing is published.
+      - name: Validate, package & publish to otzaria.org
+        id: otzaria
+        uses: Otzaria/otzaria-plugin-validator@v1
+        with:
+          path: plugin
+          build: 'true'
+          otzaria-user: ${{ secrets.OTZARIA_USER }}
+          otzaria-password: ${{ secrets.OTZARIA_PASSWORD }}
 
       - name: Determine version and tag
         id: meta
-        env:
-          REF_TYPE: ${{ github.ref_type }}
-          REF_NAME: ${{ github.ref_name }}
         run: |
           version="$(node -p "require('./plugin/manifest.json').version")"
           if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Invalid version in plugin/manifest.json: '$version' (expected X.Y.Z)" >&2
             exit 1
           fi
-          if [[ "$REF_TYPE" == "tag" && "$REF_NAME" != "v$version" ]]; then
-            echo "Tag $REF_NAME does not match plugin/manifest.json version $version" >&2
-            exit 1
-          fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=v$version"   >> "$GITHUB_OUTPUT"
-
-      # Official Otzaria action: validates, packages .otzplugin and publishes to
-      # the store. The plugin is identified by manifest.id; the version must increase.
-      - name: Validate, package & publish to otzaria.org
-        id: otzaria
-        uses: Otzaria/otzaria-plugin-validator@v1
-        with:
-          path: plugin
-          publish: 'true'
-          otzaria-user: ${{ secrets.OTZARIA_USER }}
-          otzaria-password: ${{ secrets.OTZARIA_PASSWORD }}
 
       - name: Check if release already exists
         id: release_check

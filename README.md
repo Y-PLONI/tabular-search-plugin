@@ -138,7 +138,7 @@ research/          git-ignored: Bar-Ilan material, screenshots (never committed 
 **Commands**
 
 ```powershell
-node --test tests/                 # unit tests (model, syntax, compiler, forms)
+node --test tests/*.test.js        # unit tests (model, syntax, compiler, forms); or: npm test
 node tools/serve.mjs               # http://localhost:5178/?theme=dark  (mock host; &fail=search or &fail=fulltext simulate errors)
 otzaria pack-plugin plugin -o dist/bar-ilan-table-search-2.0.1.otzplugin --force
 # without an installed Otzaria: <otzaria repo>\build\windows\x64\runner\Release\otzaria.exe pack-plugin …
@@ -168,9 +168,15 @@ otzaria pack-plugin plugin -o dist/bar-ilan-table-search-2.0.1.otzplugin --force
 
 **CI / Release** (`.github/workflows/release.yml`)
 
-* Push to `master` and pull requests: `node --test tests/` plus the official `Otzaria/otzaria-plugin-validator@v1` on
-  `plugin/` (validate and build only, `publish: 'false'`). The `.otzplugin` is uploaded as a workflow artifact.
-* Publishing happens only on a tag `vX.Y.Z`, which must equal `plugin/manifest.json` → `version`, or on a manual run
-  (*Run workflow* with `publish = true`). Then the action publishes to otzaria.org with the secrets `OTZARIA_USER` and
-  `OTZARIA_PASSWORD`, and creates the GitHub release `vX.Y.Z` with the `.otzplugin` attached.
+* **Every push to `master`** (and a manual *Run workflow*) runs `node --test tests/*.test.js` and then the official
+  `Otzaria/otzaria-plugin-validator@v1` on `plugin/`. The action validates and builds the `.otzplugin`, and **publishes it to
+  otzaria.org** with the secrets `OTZARIA_USER` and `OTZARIA_PASSWORD`. After that the workflow creates the GitHub release
+  `v<version from plugin/manifest.json>` with the `.otzplugin` and its SHA-256.
+* Version not increased: the action skips the store upload because the store already has that version, and the release
+  step skips too because the release `v<version>` already exists. To publish a new version, raise `version` in
+  `plugin/manifest.json` and push.
+* Secrets missing: the action only validates and builds, and publishes nothing. The GitHub release is still created for
+  a new version.
+* Pull requests run only the tests and the validator (`publish: 'false'`), and upload the `.otzplugin` as a workflow
+  artifact. They never publish.
 * Local check without Otzaria: `npx --yes github:Otzaria/otzaria-plugin-validator#v1 plugin --publish false`.
