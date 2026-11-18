@@ -1,0 +1,9 @@
+{
+  "name": "bar-ilan-tabular-search-plugin",
+  "private": true,
+  "description": "Otzaria plugin: Bar-Ilan style tabular search (source in plugin/, tests in tests/)",
+  "scripts": {
+    "test": "node --test tests/",
+    "serve": "node tools/serve.mjs"
+  }
+}
