@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "id": "community.yahel.table-search",
-  "name": "חיפוש בר-אילן",
-  "version": "2.0.0",
+  "name": "חיפוש טבלאי",
+  "version": "2.0.1",
   "description": "חיפוש טבלאי בסגנון בר-אילן: מרכיבים וחלופות, מרחקים וכיוון, מאפייני מרכיב, שלילה, מאגרים, חיפוש קל ומתקדם, שאילתות קודמות ומשפחות.",
-  "author": "Tabular Search Plugin contributors",
+  "author": "יהל, סנאי ויפל (התוסף המקורי); גרסה 2 בסגנון בר-אילן",
   "entrypoint": "index.html",
   "minAppVersion": "0.9.98.1",
   "sdkVersion": "1.x",
@@ -19,7 +19,7 @@
   },
   "contributes": {
     "toolTab": {
-      "title": "חיפוש בר-אילן",
+      "title": "חיפוש טבלאי",
       "order": 210,
       "defaultPinned": true,
       "iconName": "document_table_search_24_regular"
