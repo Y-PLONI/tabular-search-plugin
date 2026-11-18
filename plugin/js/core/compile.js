@@ -1,8 +1,7 @@
 /*
  * TableQuery -> Otzaria request.
  *   route 'plugin': `params` for search.query (results inside the plugin)
- *   route 'regex' : wildcards as `/…/`; today only reader.openSearchTab runs
- *                   them (see searchTarget in app.js), `params` is prepared anyway
+ *   route 'regex' : wildcards as `/…/` (run by js/regex-search.js, or the tab)
  * Every result also carries `tab`, so any query can be reopened in Otzaria's
  * own search tab, and `warnings` describing each approximation.
  *
@@ -284,7 +283,7 @@
       warn(warnings, 'regex-flags', '≈ בחיפוש עם תווים כלליים לא יחולו: ' +
         ignored.map(M.flagLabel).join(', ') + '.');
     }
-    warn(warnings, 'regex-route', 'השאילתה כוללת תווים כלליים – היא תיפתח בחיפוש של אוצריא כביטוי רגולרי.');
+    warn(warnings, 'regex-route', REGEX_ROUTE_TEXT);
     let built;
     try {
       built = R.buildRegex(all, gapsFor(query, all, all), query.proximity);
@@ -293,11 +292,44 @@
       return null;
     }
     built.warnings.forEach(function (w) { warn(warnings, w.code, w.text); });
+    regexLimits(built.regex, ctx, query, warnings);
     const settings = {};
     applyScope(settings, ctx, query);
     // Prepared for a host that accepts `/…/` in search.query; app.js decides the route.
     const params = Object.assign({ query: built.regex }, settings, pagingOf(ctx));
     return { params, tab: { query: built.regex, settings } };
+  }
+
+  const REGEX_ROUTE_TEXT = 'השאילתה כוללת תווים כלליים – היא תורץ כביטוי רגולרי.';
+  const REGEX_MAX_PATTERN = 300;
+
+  function regexLimits(regex, ctx, query, warnings) {
+    if (regex.length - 2 > REGEX_MAX_PATTERN) {
+      warn(warnings, 'regex-long', 'הביטוי ארוך מ-' + REGEX_MAX_PATTERN + ' תווים – הוא ייפתח בחיפוש של אוצריא.');
+    }
+    const scope = ctx && ctx.scope;
+    if (!query.searchAll && scope && scope.eras && scope.eras.length) {
+      warn(warnings, 'regex-eras', '≈ בחיפוש עם תווים כלליים בתוך התוסף אי אפשר לסנן לפי תקופות.');
+    }
+  }
+
+  /** A raw `/…/` typed in the advanced line. */
+  function compileRegexText(text, ctx, searchAll) {
+    const regex = String(text || '').trim();
+    const result = { ok: false, route: 'regex', params: null, tab: null, syntax: regex, errors: [], warnings: [] };
+    if (!/^\/.+\/$/.test(regex)) {
+      result.errors.push('ביטוי רגולרי נכתב בין שני לוכסנים: /…/');
+      return result;
+    }
+    const query = { searchAll: !!searchAll };
+    const settings = {};
+    applyScope(settings, ctx, query);
+    warn(result.warnings, 'regex-route', REGEX_ROUTE_TEXT);
+    regexLimits(regex, ctx, query, result.warnings);
+    result.ok = true;
+    result.params = Object.assign({ query: regex }, settings, pagingOf(ctx));
+    result.tab = { query: regex, settings };
+    return result;
   }
 
   /**
@@ -343,5 +375,5 @@
     return result;
   }
 
-  return { compile, DEFAULT_PAGE_SIZE };
+  return { compile, compileRegexText, DEFAULT_PAGE_SIZE };
 });

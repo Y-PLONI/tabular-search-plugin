@@ -172,6 +172,13 @@
       log.push([method, JSON.parse(JSON.stringify(payload || {}))]);
       switch (method) {
         case 'search.query': return searchStream(payload || {});
+        case 'search.fullText': {
+          if (params.get('fail') === 'fulltext') return ok(null).then(function () { return { success: false, data: null, error: { code: 'error.forbidden', message: 'mock' } }; });
+          const found = allBooks.slice(0, 9).map(function (b, i) {
+            return { type: 'text', book: b.title, text: 'שורה לדוגמה עם <b>התאמה</b> לביטוי ' + payload.query, textStatus: 'ok', index: i * 7, continuesToNextLine: false };
+          });
+          return ok(found);
+        }
         case 'search.getOptions': return ok({ modes: ['exact', 'advanced', 'fuzzy'], eras: ['חז"ל', 'ראשונים', 'אחרונים', 'מחברי זמננו'], maxLimit: 500 });
         case 'storage.get': return ok(memory[payload.key] === undefined ? null : memory[payload.key]);
         case 'storage.set': memory[payload.key] = payload.value; return ok(true);

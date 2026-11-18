@@ -73,7 +73,7 @@
     filter: 'M4 5h16l-6 7.5V19l-4-2v-4.5z',
     external: 'M14 4h6v6M20 4l-9 9M18 14v6H4V6h6',
     niqqud: 'M6 8h12M9 4h6M8 12h8v8M8 16h8',
-    expand: 'M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5',
+    more: 'M6 12h.01M12 12h.01M18 12h.01',
   };
 
   function icon(name, extraClass) {
@@ -161,7 +161,7 @@
     const code = h('code', { class: 'syntax', dir: 'rtl' });
     String(text || '').split(/\s+/).filter(Boolean).forEach(function (token, i) {
       if (i) code.appendChild(document.createTextNode(' '));
-      code.appendChild(h('span', { class: 'syntax-token' }, token));
+      code.appendChild(h('span', { class: 'syntax-token', dir: /^[\[\d]/.test(token) ? 'ltr' : null }, token));
     });
     return code;
   }

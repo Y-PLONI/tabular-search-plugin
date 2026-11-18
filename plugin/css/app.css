@@ -190,6 +190,7 @@ button, input, select { font: inherit; color: inherit; }
 .actions .multiline { white-space: normal; line-height: 1.3; min-height: 3.2em; }
 .actions-gap { height: var(--space-md); flex: none; }
 .actions .more-btn { display: none; }
+.more-btn .icon { stroke-width: 3; }
 
 /* ── buttons ───────────────────────────────────────────── */
 .btn {
@@ -686,6 +687,7 @@ button, input, select { font: inherit; color: inherit; }
     border-inline-end: 0;
     border-bottom: 1px solid var(--color-outline-variant);
     overflow-x: auto;
+    scrollbar-width: none;
   }
   .rail-btn { flex: 1 0 auto; padding: 0.35em 0.5em; }
   .rail-btn .icon { width: 1.3em; height: 1.3em; }

@@ -80,10 +80,16 @@
       } else if (res.total != null) {
         status.appendChild(h('strong', null, res.total.toLocaleString('he-IL')));
         status.appendChild(h('span', null, ' תוצאות' + (res.truncated ? ' (חלקי – השאילתה רחבה מדי)' : '')));
+        if (res.truncated && res.compiled && res.compiled.route === 'regex') {
+          status.appendChild(h('span', { class: 'muted small' }, ' – מוצגות רק התוצאות הראשונות'));
+        }
         if (res.running) status.appendChild(h('span', { class: 'spinner small', 'aria-hidden': 'true' }));
       }
       stopButton.hidden = !res.running;
       orderSelect.value = app.state.order;
+      const regex = !!(res.compiled && res.compiled.route === 'regex');
+      orderSelect.disabled = regex;
+      orderSelect.title = regex ? 'בחיפוש עם תווים כלליים התוצאות בסדר שהמנוע מחזיר' : 'מיון התוצאות';
       sizeSelect.value = String(app.state.pageSize);
     }
 

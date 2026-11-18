@@ -117,6 +117,10 @@
       query = F.easyToQuery(text, st.easy);
     } else if (view === 'advanced') {
       text = st.advanced.text.trim();
+      if (/^\/.+\/$/.test(text)) {
+        const raw = C.compileRegexText(text, Object.assign({ scope: st.scope, order: st.order, limit: st.pageSize }, ctx || {}), st.options.searchAll);
+        return { view, query: null, text, syntax: text, result: raw };
+      }
       const parsed = F.advancedToQuery(text);
       query = parsed.query;
       parsed.errors.forEach(function (e) { parseErrors.push(e); });
@@ -136,7 +140,7 @@
       result.ok = false;
       result.errors = parseErrors.concat(result.errors);
     }
-    return { view, query, text, syntax: view === 'table' || view === 'advanced' ? result.syntax : text, result };
+    return { view, query, text, syntax: result.syntax || text, result };
   }
 
   // ── preview card ───────────────────────────────────────────────────────────
@@ -166,9 +170,9 @@
       } else {
         line.appendChild(D.syntaxNode(built.syntax || '—'));
         if (res.ok) {
-          const external = searchTarget(res) === 'tab';
-          line.appendChild(h('span', { class: 'route-chip' + (external ? ' external' : '') },
-            external ? 'ייפתח בחיפוש של אוצריא' : 'תוצאות כאן'));
+          const regex = searchTarget(res) === 'regex';
+          line.appendChild(h('span', { class: 'route-chip' + (regex ? ' external' : '') },
+            regex ? 'תווים כלליים · תוצאות כאן' : 'תוצאות כאן'));
         }
         res.errors.forEach(function (e) { notes.appendChild(h('li', { class: 'error-text' }, e)); });
         if (!res.errors.length) res.warnings.forEach(function (w) { notes.appendChild(h('li', { class: 'warn-text' }, w.text)); });
@@ -282,7 +286,7 @@
       }
       box.appendChild(D.button(a.label, { title: a.title, disabled: a.disabled, onclick: a.onclick, class: 'secondary' + (a.group === 3 ? ' multiline' : '') }));
     });
-    const more = D.iconButton('expand', 'עוד פעולות', function () {
+    const more = D.iconButton('more', 'עוד פעולות', function () {
       Dlg.openMenu(more, list.map(function (a) {
         return { label: a.label, icon: a.icon, disabled: a.disabled, onclick: a.onclick };
       }));
@@ -369,12 +373,27 @@
   // ── search ─────────────────────────────────────────────────────────────────
 
   /**
-   * The only place that decides search.query ('plugin') vs reader.openSearchTab
-   * ('tab'). search.query sanitises `* ? ( ) |`, so wildcard regexes go to the tab;
-   * compile() already prepares `params` for both routes.
+   * The only place that picks the engine path: 'plugin' = search.query (streamed),
+   * 'regex' = runRegex() below (search.fullText, falls back to the native tab).
    */
   function searchTarget(result) {
-    return result.route === 'regex' ? 'tab' : 'plugin';
+    return result.route === 'regex' ? 'regex' : 'plugin';
+  }
+
+  /**
+   * Runs a `/…/` query and resolves { hits, capped }. search.query strips regex
+   * characters, so this uses the undocumented search.fullText path (see
+   * js/regex-search.js); a rejection means "use reader.openSearchTab instead".
+   */
+  function runRegex(compiled) {
+    const p = compiled.params;
+    const scoped = !!((p.categories && p.categories.length) || (p.books && p.books.length));
+    return root.BIRegexSearch.runRegexSearch(p.query, {
+      host: Host,
+      scope: scoped ? { all: false, categories: p.categories || [], books: p.books || [] } : { all: true },
+      categoryOf: root.BILibrary.categoryOf,
+      ensureCategories: function () { return root.BILibrary.loadTree().catch(function () {}); },
+    });
   }
 
   function historyEntry(built) {
@@ -406,12 +425,6 @@
       return;
     }
     Store.addHistory(historyEntry(built));
-    if (searchTarget(built.result) === 'tab') {
-      openTab(built.result.tab, true).then(function () {
-        Host.notify('השאילתה עם התווים הכלליים נפתחה בחיפוש של אוצריא.');
-      });
-      return;
-    }
     app.results = {
       request: { built: historyEntry(built), syntax: built.syntax, view: built.view },
       filter: null,
@@ -447,6 +460,10 @@
       res.error = built.result.errors[0];
     }
     if (app.state.view !== 'results') switchView('results', { noFocus: true });
+    if (built.result.ok && searchTarget(built.result) === 'regex') {
+      startRegexResults(built.result, offset);
+      return;
+    }
     views.results.reset();
     if (!built.result.ok) return;
     session.start(built.result.params, {
@@ -473,6 +490,52 @@
       },
     });
     scheduleRestore();
+  }
+
+  /** Regex results: one fetch, then paging and filters on the cached hits. */
+  function startRegexResults(compiled, offset) {
+    session.cancel();
+    const res = app.results;
+    const RS = root.BIRegexSearch;
+    const p = compiled.params;
+    const key = JSON.stringify([p.query, p.categories || null, p.books || null]);
+    res.warnings = res.warnings.concat([{
+      code: 'regex-inplugin',
+      text: '≈ תווים כלליים: עד ' + RS.HIT_LIMIT + ' תוצאות, בלי מיון; סינון המאגרים נעשה בתוסף אחרי החיפוש.',
+    }]);
+
+    function show(cache) {
+      let hits = cache.hits;
+      if (res.filter) hits = RS.filterHits(hits, Object.assign({ all: false }, res.filter.scope));
+      res.total = hits.length;
+      res.truncated = cache.capped;
+      res.bookCounts = RS.countByBook(hits);
+      res.running = false;
+      views.results.reset();
+      views.results.appendHits(hits.slice(offset, offset + res.limit));
+      views.results.done();
+      scheduleRestore();
+    }
+
+    if (res.regexCache && res.regexCache.key === key) {
+      show(res.regexCache);
+      return;
+    }
+    const token = (res.regexToken || 0) + 1;
+    res.regexToken = token;
+    views.results.reset();
+    runRegex(compiled).then(function (cache) {
+      if (app.results !== res || res.regexToken !== token || !res.running) return;
+      res.regexCache = Object.assign({ key }, cache);
+      show(res.regexCache);
+    }, function (error) {
+      if (app.results !== res || res.regexToken !== token) return;
+      res.running = false;
+      res.error = 'חיפוש בתווים כלליים בתוך התוסף אינו זמין כאן (' + (error.reason || 'שגיאה') +
+        '). השאילתה נפתחה בחיפוש של אוצריא.';
+      views.results.done();
+      openTab(compiled.tab, true);
+    });
   }
 
   app.stopSearch = function () {
@@ -553,7 +616,7 @@
     };
     if (hit.id != null) payload.id = hit.id;
     if (hit.type) payload.type = hit.type;
-    if (compiled && compiled.params) payload.searchQuery = compiled.params.query;
+    if (compiled && compiled.params && compiled.route !== 'regex') payload.searchQuery = compiled.params.query;
     Host.call('reader.openBook', payload).then(function (ok) {
       if (ok === false) Host.notifyError('הספר לא נמצא.');
     }, function (error) { Host.notifyError(Host.describeError(error)); });
