@@ -243,9 +243,10 @@
     const center = h('main', { class: 'center', id: 'center' }, formHost);
     const actions = h('div', { class: 'actions', role: 'toolbar', 'aria-label': 'פעולות' });
     const body = h('div', { class: 'frame' }, rail, center, actions);
-    const shell = h('div', { class: 'app-shell' }, topbar, body);
+    const scroller = h('div', { class: 'frame-scroll' }, body);
+    const shell = h('div', { class: 'app-shell' }, topbar, scroller);
     document.getElementById('root').appendChild(shell);
-    els = { title, scopeChip, rail, formHost, center, actions, body };
+    els = { title, scopeChip, rail, formHost, center, actions, body, scroller };
   }
 
   function actionList(view) {
@@ -366,7 +367,7 @@
       if (view === 'results') views.results.focusFirst();
       else pageFor(view).focusFirst();
     }
-    els.center.scrollTop = 0;
+    els.scroller.scrollTop = 0;
     scheduleRestore();
   }
 
@@ -550,7 +551,7 @@
     if (!app.results) return;
     app.results.keepCounts = true;
     startResults(offset);
-    els.center.scrollTop = 0;
+    els.scroller.scrollTop = 0;
   };
 
   app.setResultsPrefs = function (patch) {

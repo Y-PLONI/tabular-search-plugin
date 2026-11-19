@@ -4,12 +4,12 @@
 סרגל סוגי החיפוש מימין, הטופס באמצע ועמודת הפעולות משמאל. הצבעים, הגופנים והצורות מגיעים מערכת
 הנושא של אוצריא, במצב בהיר ובמצב כהה.
 
-* שם: "חיפוש טבלאי". מזהה: `community.yahel.table-search`, גרסה 2.0.1. זה עדכון לתוסף "חיפוש טבלאי" הקיים (1.10.5).
+* שם: "חיפוש טבלאי". מזהה: `community.yahel.table-search`, גרסה 2.0.2. זה עדכון לתוסף "חיפוש טבלאי" הקיים (1.10.5).
 * **קרדיט:** מבוסס על התוסף המקורי מאת יהל, סנאי ויפל. גם שדה `author` במניפסט ודיאלוג העזרה מציינים זאת.
   **שאלת הרישיון של התוסף המקורי עדיין פתוחה.** לא הועתק קוד מהמקור. המבנה והרעיונות נכתבו מחדש.
 * דרישה: אוצריא 0.9.98.1 ומעלה.
 * הרשאות: `search.fulltext.read`, `reader.open`, `library.books.read`.
-* התקנה: פותחים את הקובץ `dist/bar-ilan-table-search-2.0.1.otzplugin` באוצריא (תוספים ← התקנה מקובץ).
+* התקנה: פותחים את הקובץ `dist/bar-ilan-table-search-2.0.2.otzplugin` באוצריא (תוספים ← התקנה מקובץ).
 
 ## סוגי החיפוש
 
@@ -28,7 +28,7 @@
   כשהסמן באמצע מילה והשדה הבא ריק, החלק שאחרי הסמן עובר לשדה הבא. בשדה האחרון הרווח לא עושה כלום.
 * הדבקה של כמה מילים ממלאת את השדה הנוכחי ואת השדות שאחריו, מילה בכל שדה.
 * מקף לא מפצל מילה, ולכן שדה עם מקף מסומן כשגוי, כי אוצריא מפרקת אותו לשתי מילים.
-* הטבלה ברוחב קבוע ואינה נמתחת עם החלון. רשימת התוצאות רחבה יותר, אבל גם היא מוגבלת לשורת קריאה נוחה.
+* הטבלה ברוחב קבוע ואינה נמתחת עם החלון. בחלון רחב הטופס ועמודת הפעולות ממורכזים כגוש אחד, ופס הגלילה צמוד לקצה החלון. רשימת התוצאות רחבה יותר, אבל גם היא מוגבלת לשורת קריאה נוחה.
 
 ## מאפייני המרכיב
 
@@ -140,7 +140,7 @@ research/          git-ignored: Bar-Ilan material, screenshots (never committed 
 ```powershell
 node --test tests/*.test.js        # unit tests (model, syntax, compiler, forms); or: npm test
 node tools/serve.mjs               # http://localhost:5178/?theme=dark  (mock host; &fail=search or &fail=fulltext simulate errors)
-otzaria pack-plugin plugin -o dist/bar-ilan-table-search-2.0.1.otzplugin --force
+otzaria pack-plugin plugin -o dist/bar-ilan-table-search-2.0.2.otzplugin --force
 # without an installed Otzaria: <otzaria repo>\build\windows\x64\runner\Release\otzaria.exe pack-plugin …
 ```
 
