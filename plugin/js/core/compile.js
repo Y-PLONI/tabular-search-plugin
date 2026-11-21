@@ -1,9 +1,13 @@
 /*
  * TableQuery -> Otzaria request.
  *   route 'plugin': `params` for search.query (results inside the plugin)
- *   route 'regex' : wildcards as `/…/` (run by js/regex-search.js, or the tab)
+ *   route 'regex' : `/…/` for wildcards, or for alternatives with their own
+ *                   options (run by js/regex-search.js, or the tab)
  * Every result also carries `tab`, so any query can be reopened in Otzaria's
- * own search tab, and `warnings` describing each approximation.
+ * own search tab, and `warnings` describing each approximation. `verify`, when
+ * set, holds exact conditions the engine cannot express (options per
+ * alternative, a distance per pair in any order); js/core/verify.js applies
+ * them to the result lines of a broader engine query.
  *
  * Distances: Bar-Ilan counts positions (empty/1 = adjacent, N = up to N-1
  * words in between); Otzaria counts words in between, hence the N-1 below.
@@ -70,10 +74,8 @@
         if (words.some(function (w) { return w.text === word; })) return;
         words.push({ text: word, flags, kind });
       }
-      if (flagSets.some(function (s) { return s !== flagSets[0]; })) {
-        warn(warnings, 'per-field', '≈ באוצריא מאפייני המילה חלים על כל השדות של אותו מרכיב (המילה וחלופותיה).');
-      }
-      return { colIndex, position, words, negated, pattern, label };
+      const perField = flagSets.some(function (s) { return s !== flagSets[0]; });
+      return { colIndex, position, words, negated, pattern, perField, label };
     });
   }
 
@@ -205,14 +207,12 @@
           warn(warnings, 'min-gap', '≈ מרחק מינימלי ([4:2]) אינו נתמך; החיפוש מתחיל ממילה צמודה.');
         }
         if (gaps.some(function (g) { return g.dir === 'both'; })) {
+          // Otzaria allows one distance for all pairs; the largest one fetches a
+          // superset, and verify.js checks each pair's own distance.
           anyOrder = true;
           const max = Math.max.apply(null, gaps.map(function (g) { return g.n; }));
           params.distance = max - 1;
           params.anyOrder = true;
-          const mixed = gaps.some(function (g) { return g.n !== max || g.dir !== 'both'; });
-          if (mixed) {
-            warn(warnings, 'uniform-max', '≈ בסדר כלשהו (↔) אוצריא מחילה מרחק אחיד על כל הזוגות – המרחק הגדול שהוזן (' + max + ').');
-          }
         } else if (gaps.some(function (g) { return g.n > 1; })) {
           params.customSpacing = spacingFromGaps(gaps);
         }
@@ -265,22 +265,27 @@
     return { params, tab: { query: params.query, settings } };
   }
 
+  function ignoredRegexFlags(all, query) {
+    const ignored = [];
+    all.forEach(function (c) {
+      c.words.forEach(function (w) {
+        R.unsupportedFlags(w).forEach(function (flag) {
+          if (ignored.indexOf(flag) === -1) ignored.push(flag);
+        });
+      });
+    });
+    if (query.includeAcronyms) ignored.push(M.ACRONYM_OPTION);
+    return ignored;
+  }
+
   function compileRegex(query, ctx, all, errors, warnings) {
     if (all.some(function (c) { return c.negated; })) {
       errors.push('לא ניתן לשלב שלילת מרכיב (ל) עם תווים כלליים (? * ~ @).');
       return null;
     }
-    const ignored = [];
-    all.forEach(function (c) {
-      c.words.forEach(function (w) {
-        w.flags.forEach(function (flag) {
-          if (R.REGEX_FLAGS.indexOf(flag) === -1 && ignored.indexOf(flag) === -1) ignored.push(flag);
-        });
-      });
-    });
-    if (query.includeAcronyms) ignored.push(M.ACRONYM_OPTION);
+    const ignored = ignoredRegexFlags(all, query);
     if (ignored.length) {
-      warn(warnings, 'regex-flags', '≈ בחיפוש עם תווים כלליים לא יחולו: ' +
+      warn(warnings, 'regex-flags', '≈ בחיפוש כביטוי רגולרי לא יחולו: ' +
         ignored.map(M.flagLabel).join(', ') + '.');
     }
     warn(warnings, 'regex-route', REGEX_ROUTE_TEXT);
@@ -300,6 +305,43 @@
     return { params, tab: { query: built.regex, settings } };
   }
 
+  // ── exact checks in the plugin (verify.js) ─────────────────────────────
+
+  /** Pairs mode, three columns or more, any order, not one shared distance. */
+  function needsPairCheck(query, gaps) {
+    if (query.proximity.kind !== 'pairs' || gaps.length < 2) return false;
+    if (!gaps.some(function (g) { return g.dir === 'both'; })) return false;
+    const max = Math.max.apply(null, gaps.map(function (g) { return g.n; }));
+    return gaps.some(function (g) { return g.n !== max || g.dir !== 'both'; });
+  }
+
+  /** Conditions verify.js checks on each line: per-alternative patterns and pair distances. */
+  function verifySpec(query, all, positive) {
+    const gaps = gapsFor(query, all, positive);
+    const kind = query.proximity.kind;
+    const window = kind === 'range' ? query.proximity.n : kind === 'sentence' ? M.SENTENCE_WINDOW : null;
+    return {
+      columns: positive.map(function (c) {
+        const union = [];
+        c.words.forEach(function (w) { w.flags.forEach(function (f) { if (union.indexOf(f) === -1) union.push(f); }); });
+        const unionWords = c.words.map(function (w) { return { text: w.text, kind: w.kind, flags: union }; });
+        const looseOk = !query.includeAcronyms && unionWords.every(function (w) { return R.unsupportedFlags(w).length === 0; });
+        return {
+          alts: c.words.map(function (w) {
+            const checkable = R.unsupportedFlags(w).length === 0 && !query.includeAcronyms;
+            return { pattern: checkable ? R.wordFragment(w) : null };
+          }),
+          loose: looseOk ? R.columnToRegex(unionWords) : null,
+        };
+      }),
+      gaps: gaps.map(function (g) {
+        if (kind === 'pairs') return { n: g.n, dir: g.dir };
+        return { n: window || UNLIMITED, dir: 'both' };
+      }),
+    };
+  }
+
+  const UNLIMITED = 100000;
   const REGEX_ROUTE_TEXT = 'השאילתה כוללת תווים כלליים – היא תורץ כביטוי רגולרי.';
   const REGEX_MAX_PATTERN = 300;
 
@@ -363,17 +405,60 @@
     }
     if (errors.length) return result;
 
+    const positive = all.filter(function (c) { return !c.negated; });
+    const pairCheck = needsPairCheck(query, gapsFor(query, all, positive));
+    const perField = all.some(function (c) { return c.perField; });
     const usesPattern = all.some(function (c) { return c.pattern; });
-    result.route = usesPattern ? 'regex' : 'plugin';
-    const built = usesPattern
-      ? compileRegex(query, ctx, all, errors, warnings)
-      : compilePlugin(query, ctx, all, errors, warnings);
+    let built = null;
+    let checkFields = false;
+
+    if (usesPattern) {
+      result.route = 'regex';
+      built = compileRegex(query, ctx, all, errors, warnings);
+    } else if (perField) {
+      // Alternatives with their own options: one regex with a sub-pattern per
+      // alternative when it fits, otherwise a broader search checked here.
+      const regexReady = !(ctx && ctx.noRegex) && !all.some(function (c) { return c.negated; }) &&
+        ignoredRegexFlags(all, query).length === 0;
+      if (regexReady) {
+        const trial = [];
+        const regex = compileRegex(query, ctx, all, [], trial);
+        const fits = regex && R.patternLength(regex.tab.query) <= R.MAX_PATTERN &&
+          !trial.some(function (w) { return w.code === 'regex-order'; });
+        if (fits) {
+          result.route = 'regex';
+          built = regex;
+          trial.filter(function (w) { return w.code !== 'regex-route'; }).forEach(function (w) { warn(warnings, w.code, w.text); });
+          warn(warnings, 'per-alt-regex', PER_ALT_REGEX_TEXT);
+        }
+      }
+      if (!built) {
+        result.route = 'plugin';
+        built = compilePlugin(query, ctx, all, errors, warnings);
+        checkFields = true;
+        warn(warnings, 'per-alt-check', PER_ALT_CHECK_TEXT);
+        const unchecked = ignoredRegexFlags(all, query);
+        if (unchecked.length) {
+          warn(warnings, 'per-alt-unchecked', '≈ לפי חלופה לא נבדקים: ' + unchecked.map(M.flagLabel).join(', ') +
+            ' (לחלופות אלה סומכים על הסימון של אוצריא).');
+        }
+      }
+    } else {
+      built = compilePlugin(query, ctx, all, errors, warnings);
+    }
     if (!built || errors.length) return result;
+
+    if (pairCheck) warn(warnings, 'pair-check', PAIR_CHECK_TEXT);
     result.ok = true;
     result.params = built.params;
     result.tab = built.tab;
+    result.verify = pairCheck || checkFields ? verifySpec(query, all, positive) : null;
     return result;
   }
+
+  const PER_ALT_REGEX_TEXT = 'לכל חלופה המאפיינים שלה: החיפוש רץ כביטוי רגולרי, עם תת-ביטוי נפרד לכל חלופה.';
+  const PER_ALT_CHECK_TEXT = 'לכל חלופה המאפיינים שלה: אוצריא מחפשת עם כל המאפיינים של הטור, והתוסף משאיר רק שורות שבהן כל חלופה מתאימה למאפיינים שלה.';
+  const PAIR_CHECK_TEXT = 'בסדר כלשהו (↔): אוצריא מחפשת לפי המרחק הגדול, והתוסף בודק לכל זוג את המרחק שלו, כמו בבר-אילן.';
 
   return { compile, compileRegexText, DEFAULT_PAGE_SIZE };
 });

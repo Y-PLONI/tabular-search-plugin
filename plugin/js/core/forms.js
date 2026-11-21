@@ -48,5 +48,32 @@
     return S.parse(text);
   }
 
-  return { easyWords, easyToQuery, advancedToQuery };
+  /** Question and function words dropped from a free-form question. */
+  const FREE_STOPWORDS = ['האם', 'ומה', 'מה', 'מי', 'איך', 'כיצד', 'למה', 'מדוע', 'מתי', 'איפה', 'היכן',
+    'יש', 'אין', 'של', 'את', 'על', 'אל', 'עם', 'אם', 'או', 'כי', 'גם', 'זה', 'זו', 'זאת', 'הוא', 'היא',
+    'הם', 'הן', 'אני', 'אנו', 'אנחנו', 'אתה', 'את', 'לא', 'כן', 'כל', 'כמו', 'אבל', 'רק', 'עוד', 'אז',
+    'שם', 'פה', 'כאן', 'בין', 'לפי', 'אחר', 'אחרי', 'לפני', 'מן', 'עד', 'ה', 'ו'];
+  const FREE_FLAGS = ['ק', 'ח'];
+
+  /**
+   * חיפוש בניסוח חופשי: Otzaria has no meaning-based search, so the question
+   * becomes an ordinary editable query: its content words (question words and
+   * function words dropped), each with grammatical prefixes and plene/defective
+   * spelling, all in the same paragraph. Returns null when no word is left.
+   */
+  function freeToQuery(text) {
+    const words = String(text || '').replace(/[?!.,;:()"״־-]/g, ' ').split(/\s+/)
+      .map(M.normalizeWord)
+      .filter(function (w) { return w && FREE_STOPWORDS.indexOf(w) === -1 && M.classifyText(w) === 'word'; });
+    const unique = words.filter(function (w, i) { return words.indexOf(w) === i; });
+    if (!unique.length) return null;
+    const query = M.createEmptyQuery(unique.length, 1);
+    unique.forEach(function (word, i) {
+      query.columns[i].fields[0] = M.createField(word, FREE_FLAGS);
+    });
+    query.proximity = { kind: unique.length > 1 ? 'paragraph' : 'pairs' };
+    return query;
+  }
+
+  return { easyWords, easyToQuery, advancedToQuery, freeToQuery, FREE_STOPWORDS };
 });

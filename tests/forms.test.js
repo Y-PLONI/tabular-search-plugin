@@ -37,3 +37,15 @@ test('advanced form goes through the syntax parser', () => {
   assert.equal(p.distance, 9);
   assert.equal(p.anyOrder, true);
 });
+
+test('free-form question becomes an editable query of its content words', () => {
+  const q = F.freeToQuery('האם יש חיוב לתרום כליה לחולה מסוכן?');
+  assert.deepEqual(q.columns.map((c) => c.fields[0].text), ['חיוב', 'לתרום', 'כליה', 'לחולה', 'מסוכן']);
+  assert.deepEqual(q.columns[0].fields[0].flags, ['ק', 'ח']);
+  assert.deepEqual(q.proximity, { kind: 'paragraph' });
+  const p = compile(q, {}).params;
+  assert.equal(p.proximityScope, 'sameParagraph');
+  assert.deepEqual(p.options, { 'קידומות דקדוקיות': true, 'כתיב מלא/חסר': true });
+  assert.equal(F.freeToQuery('מה זה?'), null);
+  assert.deepEqual(F.freeToQuery('שבת').proximity, { kind: 'pairs' });
+});

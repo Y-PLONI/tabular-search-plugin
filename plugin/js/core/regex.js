@@ -1,24 +1,31 @@
 /*
- * Bar-Ilan wildcards -> an Otzaria `/…/` regex query (route B, native search tab).
- * search.query sanitises `* ? ( ) |`, so wildcards only work through
- * reader.openSearchTab, which runs a valid `/…/` query as a regex.
+ * Columns -> one Otzaria `/…/` regex. Used for Bar-Ilan wildcards and for
+ * alternatives that carry different word options (each alternative gets its
+ * own sub-pattern). search.query strips regex characters, so these run
+ * through js/regex-search.js or the native search tab.
  *
  *   ?  exactly one letter      ~  at most one letter      *  any letters
  *   (ע/י/@)  one of the letters at this position, @ = nothing
+ *
+ * The engine caps a pattern at 300 characters; a line pattern gets an implicit
+ * word boundary at both edges.
  */
 (function (root, factory) {
+  const isNode = typeof module === 'object' && module.exports;
   const api = factory(
-    typeof module === 'object' && module.exports ? require('./model.js') : root.BIModel
+    isNode ? require('./model.js') : root.BIModel,
+    isNode ? require('./wordregex.js') : root.BIWordRegex
   );
-  if (typeof module === 'object' && module.exports) module.exports = api;
+  if (isNode) module.exports = api;
   else root.BIRegex = api;
-})(typeof self !== 'undefined' ? self : this, function (M) {
+})(typeof self !== 'undefined' ? self : this, function (M, W) {
   'use strict';
 
   const LETTER = '[א-ת]';
   const GRAMMAR_PREFIX = '(?:[והבכלמש]{1,3})?';
   const GRAMMAR_SUFFIX = LETTER + '{0,3}';
-  // Flags that have a regex form; the rest are reported as ignored.
+  const MAX_PATTERN = 300;
+  // Flags a wildcard word supports; plain words support every option of wordregex.js.
   const REGEX_FLAGS = ['ק', 'ס', 'ד', 'מ'];
 
   function escapeChar(ch) {
@@ -59,7 +66,7 @@
     return escapeChar(ch);
   }
 
-  function applyFlags(fragment, flags) {
+  function applyWildcardFlags(fragment, flags) {
     let out = fragment;
     if (flags.indexOf('ד') !== -1) out = LETTER + '*' + out;
     else if (flags.indexOf('ק') !== -1) out = GRAMMAR_PREFIX + out;
@@ -68,9 +75,35 @@
     return out;
   }
 
-  /** A column = one or more alternatives, each with its own flags. */
+  /** Otzaria option names of a field's flags (Bar-Ilan letters and extras). */
+  function optionsOf(flags) {
+    const out = [];
+    flags.forEach(function (flag) {
+      const names = M.FLAGS[flag] ? M.FLAGS[flag].options : M.EXTRA_OPTIONS.indexOf(flag) !== -1 ? [flag] : [];
+      names.forEach(function (n) { if (out.indexOf(n) === -1) out.push(n); });
+    });
+    return out;
+  }
+
+  /** Flags of a word that this regex cannot reproduce (reported, not applied). */
+  function unsupportedFlags(word) {
+    if (word.kind === 'pattern') {
+      return word.flags.filter(function (f) { return REGEX_FLAGS.indexOf(f) === -1; });
+    }
+    return word.flags.filter(function (f) { return W.unsupportedOptions(optionsOf([f])).length > 0; });
+  }
+
+  /** Regex for one alternative, with its own options. */
+  function wordFragment(word) {
+    if (word.kind === 'pattern') return applyWildcardFlags(wordToRegex(word.text), word.flags);
+    return W.wordPattern(M.normalizeWord(word.text), optionsOf(word.flags).filter(function (o) {
+      return W.SUPPORTED.indexOf(o) !== -1;
+    }));
+  }
+
+  /** A column = one or more alternatives, each with its own options. */
   function columnToRegex(words) {
-    const parts = words.map(function (w) { return applyFlags(wordToRegex(w.text), w.flags); });
+    const parts = words.map(wordFragment);
     const unique = parts.filter(function (p, i) { return parts.indexOf(p) === i; });
     return unique.length === 1 ? unique[0] : '(?:' + unique.join('|') + ')';
   }
@@ -81,9 +114,21 @@
     return '(?:\\s+\\S+){0,' + (n - 1) + '}\\s+';
   }
 
+  function permutations(items) {
+    if (items.length <= 1) return [items];
+    const out = [];
+    items.forEach(function (item, i) {
+      const rest = items.slice(0, i).concat(items.slice(i + 1));
+      permutations(rest).forEach(function (p) { out.push([item].concat(p)); });
+    });
+    return out;
+  }
+
   /**
-   * columns: [{ words: [{text, flags}] }], gaps: [{n, dir}] between them,
+   * columns: [{ words: [{text, flags, kind}] }], gaps: [{n, dir}] between them,
    * proximity: TableQuery.proximity. Returns { regex, warnings }.
+   * Any-order queries list the orders; with three columns or more each order
+   * uses the largest distance (the exact pair distances are checked in js/core/verify.js).
    */
   function buildRegex(columns, gaps, proximity) {
     const warnings = [];
@@ -97,7 +142,7 @@
       joiners = parts.slice(1).map(function () { return '\\s(?:.*\\s)?'; });
       anyOrder = true;
       if (kind === 'document') {
-        warnings.push({ code: 'regex-document', text: '≈ "בתוך מסמך" בחיפוש עם תווים כלליים מחפש בתוך אותה פסקה.' });
+        warnings.push({ code: 'regex-document', text: '≈ "בתוך מסמך" בחיפוש כביטוי רגולרי מחפש בתוך אותה פסקה.' });
       }
     } else if (kind === 'range' || kind === 'sentence') {
       const n = kind === 'range' ? proximity.n : M.SENTENCE_WINDOW;
@@ -114,12 +159,21 @@
       const reversed = parts[1] + joiners[0] + parts[0];
       return { regex: '/(?:' + ordered + '|' + reversed + ')/', warnings };
     }
+    const widest = joiners.reduce(function (a, b) { return b.length > a.length ? b : a; });
+    const orders = permutations(parts).map(function (p) { return p.join(widest); });
+    const all = '(?:' + orders.join('|') + ')';
+    if (all.length <= MAX_PATTERN) return { regex: '/' + all + '/', warnings };
     warnings.push({
       code: 'regex-order',
-      text: '≈ בחיפוש עם תווים כלליים ובשלושה מרכיבים ומעלה המרכיבים נחפשים לפי הסדר שהוקלד.',
+      text: '≈ בחיפוש כביטוי רגולרי עם שלושה מרכיבים ומעלה בסדר כלשהו הביטוי ארוך מדי – המרכיבים נחפשים לפי הסדר שהוקלד.',
     });
     return { regex: '/' + ordered + '/', warnings };
   }
 
-  return { wordToRegex, columnToRegex, buildRegex, REGEX_FLAGS, LETTER };
+  /** Characters between the slashes, as the engine counts them. */
+  function patternLength(regex) {
+    return Array.from(String(regex).replace(/^\/|\/$/g, '')).length;
+  }
+
+  return { wordToRegex, columnToRegex, wordFragment, buildRegex, unsupportedFlags, optionsOf, patternLength, REGEX_FLAGS, LETTER, MAX_PATTERN };
 });

@@ -23,8 +23,15 @@ test('Reference example #1: alternatives, per-column options, ↔ distance 3', (
     anyOrder: true,
     ...PAGE,
   });
-  // Field-level flags differ inside column 1 -> documented approximation.
-  assert.ok(r.warnings.some((w) => w.code === 'per-field'));
+  // Alternatives with different options and an any-order pair do not fit one
+  // regex here: Otzaria gets the union, and the plugin checks each alternative.
+  assert.ok(r.warnings.some((w) => w.code === 'per-alt-check'));
+  assert.equal(r.verify.columns.length, 2);
+  assert.deepEqual(r.verify.gaps, [{ n: 3, dir: 'both' }]);
+  const [moshe, aharon] = r.verify.columns[0].alts.map((a) => new RegExp('^(?:' + a.pattern + ')$'));
+  assert.ok(moshe.test('ומשה'));
+  assert.ok(!moshe.test('מושה'), 'plene spelling belongs to the alternative only');
+  assert.ok(aharon.test('ואהרן') && aharon.test('אהרון'));
 });
 
 test('Reference example #2: same query in typed order uses customSpacing N-1', () => {
@@ -33,9 +40,19 @@ test('Reference example #2: same query in typed order uses customSpacing N-1', (
     { gaps: [{ max: 3, dir: 'forward' }] }
   );
   const r = compile(q, {});
-  assert.equal(r.params.distance, undefined);
-  assert.equal(r.params.anyOrder, undefined);
-  assert.deepEqual(r.params.customSpacing, { '0-1': '2' });
+  // In typed order the whole query fits one regex: each alternative keeps its own options.
+  assert.equal(r.route, 'regex');
+  assert.ok(r.warnings.some((w) => w.code === 'per-alt-regex'));
+  const re = new RegExp(r.tab.query.slice(1, -1));
+  assert.ok(re.test('ובמשה רבנו ויאמר'));
+  assert.ok(re.test('ואהרן אמר'));
+  assert.ok(!re.test('ומושה אמר'), 'plene spelling is not applied to משה');
+  assert.ok(!re.test('משה א ב ג ויאמר'), 'more than 2 words in between');
+  // Same options on both alternatives: plain search.query with customSpacing N-1.
+  const plain = compile(table([[['משה', 'ק'], ['אהרון', 'ק']], [['ויאמר']]], { gaps: [{ max: 3, dir: 'forward' }] }), {});
+  assert.equal(plain.route, 'plugin');
+  assert.deepEqual(plain.params.customSpacing, { '0-1': '2' });
+  assert.equal(plain.verify, null);
 });
 
 test('Reference example #3: negated column becomes a negative phrase with its neighbour', () => {
@@ -83,7 +100,7 @@ test('ordered gaps: unfilled pair is explicit 0 when another pair has a number',
   assert.deepEqual(r.params.customSpacing, { '0-1': '0', '1-2': '4' });
 });
 
-test('↔ with different distances uses the largest one and warns', () => {
+test('↔ with different distances: largest one for Otzaria, each pair checked in the plugin', () => {
   const q = table([[['א']], [['ב']], [['ג']]], {
     gaps: [{ max: 2, dir: 'both' }, { max: 6, dir: 'forward' }],
   });
@@ -91,7 +108,11 @@ test('↔ with different distances uses the largest one and warns', () => {
   assert.equal(r.params.distance, 5);
   assert.equal(r.params.anyOrder, true);
   assert.equal(r.params.customSpacing, undefined);
-  assert.ok(r.warnings.some((w) => w.code === 'uniform-max'));
+  assert.ok(r.warnings.some((w) => w.code === 'pair-check'));
+  assert.deepEqual(r.verify.gaps, [{ n: 2, dir: 'both' }, { n: 6, dir: 'forward' }]);
+  // One shared any-order distance, or two columns: Otzaria is exact, nothing to check.
+  assert.equal(compile(table([[['א']], [['ב']], [['ג']]], { gaps: [{ max: 4 }, { max: 4 }] }), {}).verify, null);
+  assert.equal(compile(table([[['א']], [['ב']]], { gaps: [{ max: 4 }] }), {}).verify, null);
 });
 
 test('anyOrder is never combined with customSpacing or a proximity scope', () => {
@@ -220,6 +241,9 @@ test('regex route: letter alternatives, ↔ for two columns, ignored flags', () 
   assert.equal(compile(q, {}).tab.query, '/[א-ת]*(?:ט|ת)(?:א|ע|י|)ל(?:ע|י|)פ(?:א|ו)ן[א-ת]*/');
   const two = compile(table([[['נר', 'ח']], [['שב?']]], { gaps: [{ max: 3, dir: 'both' }] }), {});
   assert.equal(two.tab.query, '/(?:נר(?:\\s+\\S+){0,2}\\s+שב[א-ת]|שב[א-ת](?:\\s+\\S+){0,2}\\s+נר)/');
-  assert.ok(two.warnings.some((w) => w.code === 'regex-flags'));
+  // ח is reproduced in the regex; תרגום ארמי needs Otzaria's dictionary and is reported.
+  assert.ok(!two.warnings.some((w) => w.code === 'regex-flags'));
+  const aramaic = compile(table([[['נר', 'א']], [['שב?']]]), {});
+  assert.ok(aramaic.warnings.some((w) => w.code === 'regex-flags'));
   assert.equal(compile(table([[['א', 'ל']], [['ב?']]]), {}).ok, false);
 });
