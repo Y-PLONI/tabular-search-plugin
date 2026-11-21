@@ -121,7 +121,8 @@
       results.push({
         id: book.id, bookId: book.bookId, type: 'text', source: 'library', book: book.title,
         categoryPath: book.categoryPath, reference: book.title + ', ' + ['פרק', 'סימן', 'דף'][n % 3] + ' ' + (n % 40 + 1),
-        text: text + (n % 7 === 0 ? '<script>alert(1)</script>' : ''), textStatus: n % 29 === 5 ? 'stale' : 'ok',
+        text: text + (words[2] ? ' ' + 'עוד '.repeat(n % 9) + '<b>' + words[2] + '</b>' : '') +
+          (n % 7 === 0 ? '<script>alert(1)</script>' : ''), textStatus: n % 29 === 5 ? 'stale' : 'ok',
         index: n * 3, mergedCount: 1,
       });
     }

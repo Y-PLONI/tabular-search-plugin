@@ -4,12 +4,12 @@
 סרגל סוגי החיפוש מימין, הטופס באמצע ועמודת הפעולות משמאל. הצבעים, הגופנים והצורות מגיעים מערכת
 הנושא של אוצריא, במצב בהיר ובמצב כהה.
 
-* שם: "חיפוש טבלאי". מזהה: `community.yahel.table-search`, גרסה 2.0.2. זה עדכון לתוסף "חיפוש טבלאי" הקיים (1.10.5).
+* שם: "חיפוש טבלאי". מזהה: `community.yahel.table-search`, גרסה 2.1.0. זה עדכון לתוסף "חיפוש טבלאי" הקיים (1.10.5).
 * **קרדיט:** מבוסס על התוסף המקורי מאת יהל, סנאי ויפל. גם שדה `author` במניפסט ודיאלוג העזרה מציינים זאת.
   **שאלת הרישיון של התוסף המקורי עדיין פתוחה.** לא הועתק קוד מהמקור. המבנה והרעיונות נכתבו מחדש.
 * דרישה: אוצריא 0.9.98.1 ומעלה.
 * הרשאות: `search.fulltext.read`, `reader.open`, `library.books.read`.
-* התקנה: פותחים את הקובץ `dist/bar-ilan-table-search-2.0.2.otzplugin` באוצריא (תוספים ← התקנה מקובץ).
+* התקנה: פותחים את הקובץ `dist/bar-ilan-table-search-2.1.0.otzplugin` באוצריא (תוספים ← התקנה מקובץ).
 
 ## סוגי החיפוש
 
@@ -18,7 +18,7 @@
 | חיפוש טבלאי | מלא: 4 מרכיבים, ובכל אחד מילה ו-3 חלופות ("או"). בין המרכיבים "וגם". מרחקים, מאפייני מרכיב ומאפייני חיפוש |
 | חיפוש קל | מלא: ללא תוספות או עם תוספות (קידומות דקדוקיות למילה הראשונה, עד 2 מילים בין מילות החיפוש, כתיב מלא) |
 | חיפוש מתקדם | שורת תחביר של בר-אילן (`# * ! + $ % ^ - <> ( / )`, `[4:1]`, `[4:4-]`, `10:`, `פסקה:`) וכפתורי האופרטורים. "הצג בטבלה" ו"ערוך כתחביר" מעבירים שאילתה בין הטופס המתקדם לטבלה |
-| ניסוח חופשי | ≈ לאוצריא אין חיפוש בשפה טבעית. השאלה נפתחת בחיפוש של אוצריא בלי להריץ |
+| ניסוח חופשי | ≈ לאוצריא אין חיפוש לפי משמעות. התוסף הופך את השאלה לחיפוש רגיל: מילות התוכן (בלי מילות שאלה וקישור), כל אחת עם ק ו-ח, כולן באותה פסקה. החיפוש מוצג בטבלה (עד 4 מילים) או בשורת החיפוש המתקדם, רץ מיד, ו"ערוך חיפוש" פותח אותו לעריכה |
 | המאגרים המשתתפים | עץ מקורות עד רמת ספר, עם בחירה חלקית. כתיבת מקורות וקטלוג (חיפוש ספר לפי שם), קבוצות מאגרים, תקופות, "בחר הכל" ו"התחל שוב" |
 
 ### הקלדה בטבלה
@@ -51,8 +51,16 @@
 | פ | חיפוש שנשמר | ✗ מוצג אבל מושבת. אוצריא לא יכולה להשתמש בתוצאות של חיפוש קודם כמרכיב |
 | (ריק) | ללא אפיון | ✓ מסיר את כל המאפיינים מהשדה |
 
-≈ באוצריא המאפיינים חלים על כל הטור, כלומר על המילה ועל החלופות שלה. כשלשדות של אותו טור יש מאפיינים
-שונים, נשלח האיחוד שלהם, והתוסף מציג הערה.
+**מאפיינים לכל חלופה, כמו בבר-אילן.** למשל: אהרן עם כתיב מלא/חסר, והחלופה משה בלי. באוצריא אפשרויות המילה
+חלות על כל הטור, ולכן כשלחלופות של אותו טור יש מאפיינים שונים, התוסף עובד כך:
+1. אם השאילתה נכנסת בביטוי רגולרי אחד (עד 300 תווים, בלי שלילה), כל חלופה מקבלת תת-ביטוי משלה, והחיפוש רץ דרך
+   `search.fullText` (ראו "תווים כלליים").
+2. אחרת אוצריא מחפשת עם האיחוד של המאפיינים, והתוסף בודק כל שורה בתוצאות: הוא משאיר רק שורות שבהן החלופה שנמצאה
+   מתאימה למאפיינים שלה. הבדיקה רצה על עד 2,000 התוצאות הראשונות.
+
+את המאפיינים ק, ס, ח, ג, ד, מ, ע ו-ש, חלק ממילה, וקידומות וסיומות ארמיות התוסף בונה בדיוק כמו אוצריא, לפי הקוד
+של מנוע החיפוש (`hebrew_query.rs`, גרסה 7.2.0). ≈ תרגום לארמית, שגיאות כתיב, ניקוד וראשי תיבות צריכים את המילונים
+של אוצריא, ולכן אי אפשר לבדוק אותם לפי חלופה. בחלופה כזו התוסף סומך על המילה שאוצריא סימנה בתוצאה.
 
 "עוד באוצריא" (מתחת לרשת): חלק ממילה, שגיאות כתיב, קידומות ארמיות, סיומות ארמיות, ניקוד, טעמים.
 לאפשרויות אלה אין מקבילה בבר-אילן.
@@ -66,7 +74,7 @@
 |---|---|
 | כל הזוגות לפי הסדר | ✓ `customSpacing` לכל זוג, N−1 |
 | זוג אחד בכל סדר, או כמה זוגות עם אותו N | ✓ `anyOrder` עם `distance` = N−1 |
-| ↔ עם מרחקים שונים, או ערבוב של ↔ ו"לפי הסדר" | ≈ אוצריא מחילה "בכל סדר" על כל הזוגות, עם המרחק הגדול שהוזן |
+| ↔ עם מרחקים שונים, או ערבוב של ↔ ו"לפי הסדר" (3 מרכיבים ומעלה) | ✓ אוצריא מחפשת "בכל סדר" עם המרחק הגדול, והתוסף בודק בכל שורה את המרחק והכיוון של כל זוג. הבדיקה רצה על עד 2,000 התוצאות הראשונות |
 | טווח מילים N | ≈ `anyOrder` עם N−1, נבדק בין זוגות סמוכים ולא כרוחב חלון אחד |
 | בתוך משפט | ≈ אין גבולות משפט. נחפש עד 11 מילים ביניהם, בכל סדר |
 | בתוך פסקה | ✓ `sameParagraph`. פסקה באוצריא היא שורה: הלכה, סעיף, דיבור המתחיל |
@@ -125,7 +133,9 @@ plugin/            only this folder is packed into the .otzplugin
     model.js       TableQuery model, Bar-Ilan property letters, normalisation
     syntax.js      Bar-Ilan advanced syntax <-> TableQuery
     compile.js     TableQuery -> search.query params / reader.openSearchTab request + warnings
-    regex.js       wildcards -> /…/ for the native search tab
+    wordregex.js   Otzaria word options -> regex (port of the engine's hebrew_query.rs, v7.2.0)
+    regex.js       columns -> one /…/ (wildcards, or a sub-pattern per alternative)
+    verify.js      exact checks on result lines (options per alternative, distance per pair)
     forms.js       חיפוש קל / מתקדם -> TableQuery
   js/*.js          host wrapper, theme, storage, streaming session, library tree
   js/ui/*.js       views and dialogs
@@ -140,13 +150,19 @@ research/          git-ignored: Bar-Ilan material, screenshots (never committed 
 ```powershell
 node --test tests/*.test.js        # unit tests (model, syntax, compiler, forms); or: npm test
 node tools/serve.mjs               # http://localhost:5178/?theme=dark  (mock host; &fail=search or &fail=fulltext simulate errors)
-otzaria pack-plugin plugin -o dist/bar-ilan-table-search-2.0.2.otzplugin --force
+otzaria pack-plugin plugin -o dist/bar-ilan-table-search-2.1.0.otzplugin --force
 # without an installed Otzaria: <otzaria repo>\build\windows\x64\runner\Release\otzaria.exe pack-plugin …
 ```
 
 **Design decisions / Hinweise**
 
 * Distances use Bar-Ilan counting in the UI; the compiler subtracts 1 (Otzaria counts words in between).
+* What Otzaria cannot express in one query (different options per alternative, a separate distance per pair in any
+  order) is compiled as a broader engine query plus a `verify` spec. `js/core/verify.js` then checks each result line.
+  A column whose word is not in the line at all keeps the hit; a column that is there but not exact drops it. Up to
+  2,000 lines are fetched and checked (`VERIFY_FETCH_LIMIT` in `app.js`). Assumption, not verified in Otzaria: the
+  `text` of a `search.query` hit is the whole line, and `anyOrder` with distance d keeps every chain whose consecutive
+  words are at most d apart.
   `anyOrder` is never sent together with `customSpacing` or a `proximityScope` (Otzaria rejects that).
 * Word options go to `options` when every column has the same set, otherwise to `wordOptions` keyed
   `"{word}_{index}"` with the normalised word (״→", ׳→').
