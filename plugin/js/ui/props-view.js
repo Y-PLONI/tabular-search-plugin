@@ -89,7 +89,7 @@
       const field = app.focusedField();
       target.textContent = app.state.markAll
         ? 'חל על: כל השדות המלאים'
-        : 'חל על: מרכיב ' + (focus.col + 1) + (focus.row ? ', חלופה ' + focus.row : '');
+        : 'חל על: מרכיב ' + (focus.col + 1) + (focus.row ? ', חלופה ' + focus.row : ', המילה הראשית') + ' בלבד';
       Object.keys(flagButtons).forEach(function (letter) {
         flagButtons[letter].setAttribute('aria-pressed', String(!!field && field.flags.indexOf(letter) !== -1));
       });

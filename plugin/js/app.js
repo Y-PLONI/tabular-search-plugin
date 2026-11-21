@@ -159,7 +159,14 @@
       D.clear(tools);
       const view = app.state.formView;
       if (view === 'free') {
-        line.appendChild(h('span', { class: 'muted' }, 'תיפתח בחיפוש של אוצריא, בלי הרצה.'));
+        const derived = F.freeToQuery(app.state.free.text);
+        if (!derived) {
+          line.appendChild(h('span', { class: 'muted' }, 'הקלידו שאלה; מילות התוכן שלה יהפכו לחיפוש שאפשר לערוך.'));
+          return;
+        }
+        line.appendChild(h('span', { class: 'muted' }, 'יחפש: '));
+        line.appendChild(D.syntaxNode(S.stringify(derived)));
+        line.appendChild(h('span', { class: 'route-chip' }, M.fitsTable(derived) ? 'בטבלה' : 'בחיפוש מתקדם'));
         return;
       }
       const built = buildCurrent();
@@ -171,8 +178,10 @@
         line.appendChild(D.syntaxNode(built.syntax || '—'));
         if (res.ok) {
           const regex = searchTarget(res) === 'regex';
-          line.appendChild(h('span', { class: 'route-chip' + (regex ? ' external' : '') },
-            regex ? 'תווים כלליים · תוצאות כאן' : 'תוצאות כאן'));
+          const perAlt = res.warnings.some(function (w) { return w.code === 'per-alt-regex'; });
+          const label = regex ? (perAlt ? 'ביטוי רגולרי לפי חלופה · תוצאות כאן' : 'תווים כלליים · תוצאות כאן')
+            : res.verify ? 'בדיקה מדויקת בתוסף · תוצאות כאן' : 'תוצאות כאן';
+          line.appendChild(h('span', { class: 'route-chip' + (regex || res.verify ? ' external' : '') }, label));
         }
         res.errors.forEach(function (e) { notes.appendChild(h('li', { class: 'error-text' }, e)); });
         if (!res.errors.length) res.warnings.forEach(function (w) { notes.appendChild(h('li', { class: 'warn-text' }, w.text)); });
@@ -232,7 +241,7 @@
         h('button', { type: 'button', class: 'topbar-btn', title: 'עזרה', 'aria-label': 'עזרה', onclick: function () { app.openDialog('help'); } }, D.icon('help'))));
 
     const rail = h('nav', { class: 'rail', 'aria-label': 'סוג החיפוש' },
-      railButton('free', 'chat', 'ניסוח חופשי', 'חיפוש בניסוח חופשי ≈ (נפתח בחיפוש של אוצריא)'),
+      railButton('free', 'chat', 'ניסוח חופשי', 'חיפוש בניסוח חופשי ≈ (השאלה הופכת לחיפוש שאפשר לערוך)'),
       railButton('easy', 'flash', 'חיפוש קל'),
       railButton('table', 'table', 'חיפוש טבלאי'),
       railButton('advanced', 'code', 'חיפוש מתקדם'),
@@ -271,7 +280,7 @@
     const box = D.clear(els.actions);
     els.body.classList.toggle('no-actions', view === 'results');
     if (view === 'results') return;
-    box.appendChild(D.button(view === 'free' ? 'פתח באוצריא' : 'בצע חיפוש', {
+    box.appendChild(D.button('בצע חיפוש', {
       variant: 'filled',
       icon: 'search',
       class: 'primary-action',
@@ -414,9 +423,12 @@
     const st = app.state;
     if (st.formView === 'free') {
       const text = st.free.text.trim();
-      if (!text) { Host.notifyError('יש להקליד שאלה.'); return; }
+      const derived = F.freeToQuery(text);
+      if (!derived) { Host.notifyError(text ? 'לא נמצאו בשאלה מילים לחיפוש.' : 'יש להקליד שאלה.'); return; }
       Store.addHistory({ view: 'free', syntax: text, text });
-      openTab({ query: text }, false);
+      // The question becomes an ordinary, editable query in the table or the advanced line.
+      if (M.fitsTable(derived)) app.loadEntry({ view: 'table', query: M.fitToTable(derived) }, { run: true });
+      else app.loadEntry({ view: 'advanced', text: S.stringify(derived) }, { run: true });
       return;
     }
     const built = buildCurrent();
@@ -438,7 +450,7 @@
     const res = app.results;
     const saved = snapshotForm();
     applyEntryToForm(res.request.built, true);
-    const ctx = { includeBookCounts: true, offset, limit: app.state.pageSize, order: app.state.order };
+    const ctx = { includeBookCounts: true, offset, limit: app.state.pageSize, order: app.state.order, noRegex: !!res.noRegex };
     if (res.filter) ctx.scope = res.filter.scope;
     const prevSearchAll = app.state.options.searchAll;
     if (res.filter) app.state.options.searchAll = false;
@@ -461,8 +473,8 @@
       res.error = built.result.errors[0];
     }
     if (app.state.view !== 'results') switchView('results', { noFocus: true });
-    if (built.result.ok && searchTarget(built.result) === 'regex') {
-      startRegexResults(built.result, offset);
+    if (built.result.ok && (searchTarget(built.result) === 'regex' || built.result.verify)) {
+      startCachedResults(built.result, offset);
       return;
     }
     views.results.reset();
@@ -494,22 +506,36 @@
   }
 
   /** Regex results: one fetch, then paging and filters on the cached hits. */
-  function startRegexResults(compiled, offset) {
+  /** Lines fetched for exact checks in the plugin (4 pages of 500). */
+  const VERIFY_FETCH_LIMIT = 2000;
+  const FETCH_PAGE = 500;
+
+  /**
+   * Results that are fetched once and then paged and filtered in the plugin:
+   * regex queries (search.fullText) and queries with exact checks (verify.js).
+   */
+  function startCachedResults(compiled, offset) {
     session.cancel();
     const res = app.results;
     const RS = root.BIRegexSearch;
+    const regex = searchTarget(compiled) === 'regex';
     const p = compiled.params;
-    const key = JSON.stringify([p.query, p.categories || null, p.books || null]);
-    res.warnings = res.warnings.concat([{
-      code: 'regex-inplugin',
-      text: '≈ תווים כלליים: עד ' + RS.HIT_LIMIT + ' תוצאות, בלי מיון; סינון המאגרים נעשה בתוסף אחרי החיפוש.',
-    }]);
+    const key = JSON.stringify([regex, p.query, p.alternativeWords || null, p.options || null, p.wordOptions || null,
+      p.distance, p.customSpacing || null, p.negativeQuery || null, p.categories || null, p.books || null,
+      p.eras || null, p.order]);
+    if (regex) {
+      res.warnings = res.warnings.concat([{
+        code: 'regex-inplugin',
+        text: '≈ חיפוש כביטוי רגולרי: עד ' + RS.HIT_LIMIT + ' תוצאות, בלי מיון; סינון המאגרים נעשה בתוסף אחרי החיפוש.',
+      }]);
+    }
 
     function show(cache) {
       let hits = cache.hits;
       if (res.filter) hits = RS.filterHits(hits, Object.assign({ all: false }, res.filter.scope));
       res.total = hits.length;
       res.truncated = cache.capped;
+      res.checkedNote = cache.checkedNote || null;
       res.bookCounts = RS.countByBook(hits);
       res.running = false;
       views.results.reset();
@@ -518,25 +544,75 @@
       scheduleRestore();
     }
 
-    if (res.regexCache && res.regexCache.key === key) {
-      show(res.regexCache);
+    if (res.cache && res.cache.key === key) {
+      show(res.cache);
       return;
     }
-    const token = (res.regexToken || 0) + 1;
-    res.regexToken = token;
+    const token = (res.cacheToken || 0) + 1;
+    res.cacheToken = token;
+    const current = function () { return app.results === res && res.cacheToken === token; };
     views.results.reset();
-    runRegex(compiled).then(function (cache) {
-      if (app.results !== res || res.regexToken !== token || !res.running) return;
-      res.regexCache = Object.assign({ key }, cache);
-      show(res.regexCache);
+
+    const fetch = regex ? runRegex(compiled) : fetchForCheck(p, current);
+    fetch.then(function (found) {
+      if (!current() || !res.running) return;
+      let hits = found.hits;
+      let checkedNote = null;
+      if (compiled.verify) {
+        const before = hits.length;
+        hits = root.BIVerify.filterHits(hits, compiled.verify);
+        checkedNote = 'נבדקו ' + before.toLocaleString('he-IL') + ' שורות' +
+          (found.looseTotal != null && found.looseTotal > before ? ' מתוך ' + found.looseTotal.toLocaleString('he-IL') : '') +
+          '; נשארו ' + hits.length.toLocaleString('he-IL') + ' שמתאימות בדיוק.';
+      }
+      res.cache = { key, hits, capped: found.capped, checkedNote };
+      show(res.cache);
     }, function (error) {
-      if (app.results !== res || res.regexToken !== token) return;
+      if (!current()) return;
+      if (regex && compiled.warnings.some(function (w) { return w.code === 'per-alt-regex'; })) {
+        // Alternatives with own options: without the regex path, check them in the plugin.
+        res.noRegex = true;
+        startResults(offset);
+        return;
+      }
       res.running = false;
-      res.error = 'חיפוש בתווים כלליים בתוך התוסף אינו זמין כאן (' + (error.reason || 'שגיאה') +
-        '). השאילתה נפתחה בחיפוש של אוצריא.';
+      if (regex) {
+        res.error = 'חיפוש כביטוי רגולרי בתוך התוסף אינו זמין כאן (' + (error.reason || 'שגיאה') +
+          '). השאילתה נפתחה בחיפוש של אוצריא.';
+        openTab(compiled.tab, true);
+      } else {
+        res.error = Host.describeError(error);
+      }
       views.results.done();
-      openTab(compiled.tab, true);
     });
+  }
+
+  /** Up to VERIFY_FETCH_LIMIT lines of the broader search.query, page by page. */
+  async function fetchForCheck(params, current) {
+    const hits = [];
+    let total = null;
+    for (let offset = 0; offset < VERIFY_FETCH_LIMIT && (total == null || offset < total); offset += FETCH_PAGE) {
+      const page = Object.assign({}, params, { limit: FETCH_PAGE, offset, includeBookCounts: false });
+      const stream = Host.stream('search.query', page);
+      const iterator = stream[Symbol.asyncIterator] ? stream[Symbol.asyncIterator]() : stream;
+      try {
+        for (;;) {
+          const step = await iterator.next();
+          if (!current() || !app.results.running) {
+            if (iterator.return) iterator.return().catch(function () {});
+            return { hits: [], capped: false };
+          }
+          if (step.done) break;
+          const chunk = step.value || {};
+          if (chunk.total != null) total = chunk.total;
+          if (chunk.results) Array.prototype.push.apply(hits, chunk.results);
+        }
+      } catch (error) {
+        if (!hits.length) throw error;
+        break;
+      }
+    }
+    return { hits, capped: total != null && total > VERIFY_FETCH_LIMIT, looseTotal: total };
   }
 
   app.stopSearch = function () {

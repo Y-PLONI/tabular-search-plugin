@@ -80,9 +80,10 @@
       } else if (res.total != null) {
         status.appendChild(h('strong', null, res.total.toLocaleString('he-IL')));
         status.appendChild(h('span', null, ' תוצאות' + (res.truncated ? ' (חלקי – השאילתה רחבה מדי)' : '')));
-        if (res.truncated && res.compiled && res.compiled.route === 'regex') {
+        if (res.truncated && res.compiled && (res.compiled.route === 'regex' || res.compiled.verify)) {
           status.appendChild(h('span', { class: 'muted small' }, ' – מוצגות רק התוצאות הראשונות'));
         }
+        if (res.checkedNote) status.appendChild(h('span', { class: 'muted small' }, ' · ' + res.checkedNote));
         if (res.running) status.appendChild(h('span', { class: 'spinner small', 'aria-hidden': 'true' }));
       }
       stopButton.hidden = !res.running;
